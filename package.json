@@ -1,9 +1,9 @@
 {
-  "name": "typescript-template",
+  "name": "ollama-tool-user",
   "private": true,
   "version": "1.0.0",
-  "description": "A basic typescript project template, e.g. for code retreats",
-  "main": "index.js",
+  "description": "A little program for testing tool use and other prompts with Ollama and models like llama3 and Nemistral",
+  "main": "src/index.ts",
   "scripts": {
     "build": "tsc",
     "test": "mocha",
@@ -15,15 +15,15 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@biomejs/biome": "1.8.1",
+    "@biomejs/biome": "^1.9.4",
     "@tsconfig/recommended": "^1.0.6",
-    "@types/chai": "^4.2.18",
-    "@types/mocha": "^10.0.6",
-    "@types/node": "^20.14.2",
-    "chai": "^5.1.1",
-    "mocha": "^10.4.0",
+    "@types/node": "^22.10.1",
     "nyc": "^17.0.0",
     "ts-node": "^10.0.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^2.0.4"
+  },
+  "dependencies": {
+    "ollama": "^0.5.6"
   }
 }
