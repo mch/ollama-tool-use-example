@@ -1,5 +1,11 @@
 import { Ollama } from "ollama";
-import type { ChatRequest, Message, Tool, ToolCall } from "ollama";
+import type {
+    ChatRequest,
+    ChatResponse,
+    Message,
+    Tool,
+    ToolCall,
+} from "ollama";
 
 enum Role {
     System = "system",
@@ -37,16 +43,10 @@ const tools: Tool[] = [
         type: "function",
         function: {
             name: "get_current_weather",
-            description:
-                "Get the current weather for a location. If the location is not specified, use the 'default' location.",
+            description: "Get the current weather",
             parameters: {
                 type: "object",
                 properties: {
-                    location: {
-                        type: "string",
-                        description:
-                            "The location to get the weather for, e.g. San Francisco, CA",
-                    },
                     format: {
                         type: "string",
                         description:
@@ -54,7 +54,7 @@ const tools: Tool[] = [
                         enum: ["celsius", "fahrenheit"],
                     },
                 },
-                required: ["location", "format"],
+                required: ["format"],
             },
         },
     },
@@ -82,59 +82,54 @@ async function main() {
     const ollama = new Ollama({
         host: "http://makani.local:11434",
     });
-    const models = await ollama.list();
-    console.log(`Available models:`);
-    console.log(models.models.map((m) => m.name));
+    // const models = await ollama.list();
+    // console.log(`Available models:`);
+    // console.log(models.models.map((m) => m.name));
 
     const request: ChatRequest & { stream?: false | undefined } = {
         model: "qwen2.5-coder:latest",
         tools,
         stream: false,
-        messages: [
-            {
-                role: Role.User,
-                content: "What time is it?",
-            },
-        ],
+        messages: [],
     };
-    console.log(
-        `Sending request with messages:\n${JSON.stringify(request.messages)}`,
-    );
-    let response = await ollama.chat(request);
-    console.log(`Got response:`);
-    console.log(JSON.stringify(response, null, 2));
 
-    // Copy the response into the context for the next request
-    request.messages?.push(response.message);
+    const userMessages = [
+        "What time is it?",
+        "No, tell me the time informally, as if we are in the same room together.",
+        "What's the weather forecast for today?",
+    ];
 
-    // Execute the tool and add the response to the context
-    const toolResults = processToolCalls(response.message.tool_calls);
-    request.messages?.push(...toolResults);
+    for (const userMsg of userMessages) {
+        request.messages?.push({ role: "user", content: userMsg });
+        const strMsgs = request.messages?.map(
+            (m) =>
+                `- ${m.role}: ${m.content || JSON.stringify(m.tool_calls)}\n`,
+        );
+        console.log(`Sending request with messages:\n${strMsgs}`);
+        let response = await ollama.chat(request);
+        logResponse(response);
 
-    console.log(
-        `Sending request with messages:\n${JSON.stringify(request.messages)}`,
-    );
-    response = await ollama.chat(request);
-    console.log(`Got response:`);
-    console.log(JSON.stringify(response, null, 2));
-    request.messages?.push({
-        role: "user",
-        content:
-            "No, tell me the time informally, as if we are in the same room together.",
-    });
-    response = await ollama.chat(request);
-    console.log(`Got response:`);
-    console.log(JSON.stringify(response, null, 2));
-    request.messages?.push({
-        role: "user",
-        content: "What's the weather forecast for today?",
-    });
-    response = await ollama.chat(request);
-    console.log(`Got response:`);
-    console.log(JSON.stringify(response, null, 2));
+        // Copy the response into the context for the next request
+        request.messages?.push(response.message);
+
+        if (response.message.tool_calls) {
+            // Execute the tool and add the response to the context
+            const toolResults = processToolCalls(response.message.tool_calls);
+            request.messages?.push(...toolResults);
+
+            // Roundtrip the tool result so the LLM can answer the original question
+            response = await ollama.chat(request);
+            logResponse(response);
+            request.messages?.push(response.message);
+        }
+    }
 }
 
 main();
+
+function logResponse(response: ChatResponse) {
+    console.log("Response: ", JSON.stringify(response.message, null, 2));
+}
 
 function processToolCalls(tool_calls: ToolCall[] = []): Message[] {
     const messages: Message[] = [];
