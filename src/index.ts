@@ -90,25 +90,26 @@ async function main() {
         model: "qwen2.5-coder:latest",
         tools,
         stream: false,
-        messages: [],
+        messages: [
+            {
+                role: Role.System,
+                content:
+                    "You are an easy going AI Agent named Geoff. You use an informal and conversational style. If you don't know an answer to a question, you will user your tools to try to get an answer.",
+            },
+        ],
     };
 
     const userMessages = [
         "What time is it?",
         "No, tell me the time informally, as if we are in the same room together.",
-        "What's the weather forecast for today?",
+        "What day of the week is it?",
+        "What's the weather forecast for today in Calgary?",
     ];
 
     for (const userMsg of userMessages) {
         request.messages?.push({ role: "user", content: userMsg });
-        const strMsgs = request.messages?.map(
-            (m) =>
-                `- ${m.role}: ${m.content || JSON.stringify(m.tool_calls)}\n`,
-        );
-        console.log(`Sending request with messages:\n${strMsgs}`);
-        let response = await ollama.chat(request);
-        logResponse(response);
 
+        let response = await ollama.chat(request);
         // Copy the response into the context for the next request
         request.messages?.push(response.message);
 
@@ -119,28 +120,20 @@ async function main() {
 
             // Roundtrip the tool result so the LLM can answer the original question
             response = await ollama.chat(request);
-            logResponse(response);
             request.messages?.push(response.message);
         }
+        logConversation(request.messages);
     }
 }
 
 main();
 
-function logResponse(response: ChatResponse) {
-    console.log("Response: ", JSON.stringify(response.message, null, 2));
-}
-
 function processToolCalls(tool_calls: ToolCall[] = []): Message[] {
     const messages: Message[] = [];
     for (const call of tool_calls ?? []) {
-        console.log(
-            `Calling function ${call.function.name} with args ${call.function.arguments}`,
-        );
         if (call.function.name in toolFunctions) {
             const f = toolFunctions[call.function.name].f;
             const functionResult = f(call.function.arguments);
-            console.log(`function result: ${functionResult}`);
             messages?.push({
                 role: Role.Tool,
                 content: functionResult,
@@ -148,4 +141,15 @@ function processToolCalls(tool_calls: ToolCall[] = []): Message[] {
         }
     }
     return messages;
+}
+
+function logConversation(messages: Message[] = []) {
+    const strMsgs: string[] =
+        messages.map((m) => {
+            if (m.tool_calls) {
+                return `- ${m.role} tool calls: ${JSON.stringify(m.tool_calls)}\n`;
+            }
+            return `- ${m.role}: ${m.content}\n`;
+        }) ?? [];
+    console.log(`Conversation:\n${strMsgs.join("")}`);
 }
