@@ -1,5 +1,5 @@
 import { Ollama } from "ollama";
-import type { ChatRequest, Tool } from "ollama";
+import type { ChatRequest, Message, Tool, ToolCall } from "ollama";
 
 enum Role {
     System = "system",
@@ -37,7 +37,8 @@ const tools: Tool[] = [
         type: "function",
         function: {
             name: "get_current_weather",
-            description: "Get the current weather for a location",
+            description:
+                "Get the current weather for a location. If the location is not specified, use the 'default' location.",
             parameters: {
                 type: "object",
                 properties: {
@@ -107,20 +108,8 @@ async function main() {
     request.messages?.push(response.message);
 
     // Execute the tool and add the response to the context
-    for (const call of response.message.tool_calls ?? []) {
-        console.log(
-            `Calling function ${call.function.name} with args ${call.function.arguments}`,
-        );
-        if (call.function.name in toolFunctions) {
-            const f = toolFunctions[call.function.name].f;
-            const functionResult = f(call.function.arguments);
-            console.log(`function result: ${functionResult}`);
-            request.messages?.push({
-                role: Role.Tool,
-                content: functionResult,
-            });
-        }
-    }
+    const toolResults = processToolCalls(response.message.tool_calls);
+    request.messages?.push(...toolResults);
 
     console.log(
         `Sending request with messages:\n${JSON.stringify(request.messages)}`,
@@ -136,6 +125,32 @@ async function main() {
     response = await ollama.chat(request);
     console.log(`Got response:`);
     console.log(JSON.stringify(response, null, 2));
+    request.messages?.push({
+        role: "user",
+        content: "What's the weather forecast for today?",
+    });
+    response = await ollama.chat(request);
+    console.log(`Got response:`);
+    console.log(JSON.stringify(response, null, 2));
 }
 
 main();
+
+function processToolCalls(tool_calls: ToolCall[] = []): Message[] {
+    const messages: Message[] = [];
+    for (const call of tool_calls ?? []) {
+        console.log(
+            `Calling function ${call.function.name} with args ${call.function.arguments}`,
+        );
+        if (call.function.name in toolFunctions) {
+            const f = toolFunctions[call.function.name].f;
+            const functionResult = f(call.function.arguments);
+            console.log(`function result: ${functionResult}`);
+            messages?.push({
+                role: Role.Tool,
+                content: functionResult,
+            });
+        }
+    }
+    return messages;
+}
